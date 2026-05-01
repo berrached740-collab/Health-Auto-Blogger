@@ -1,0 +1,31 @@
+name: Auto Post to Blogger (Health)
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        pip install google-api-python-client google-auth-oauthlib google-auth-httplib2
+        pip install feedparser
+        pip install google-generativeai
+
+    - name: Run Auto Blogger Script
+      env:
+        BLOG_ID: ${{ secrets.BLOG_ID }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      run: python script.py
