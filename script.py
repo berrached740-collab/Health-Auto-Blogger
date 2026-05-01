@@ -15,7 +15,7 @@ def main():
         return
         
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-2.5-flash')
 
     # مصادر RSS قوية جداً في الصحة، العناية بالبشرة، العلاج الطبيعي، والراحة النفسية
     rss_urls = [
