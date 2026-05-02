@@ -4,20 +4,46 @@ import google.generativeai as genai
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 import random
-import time
 
 def main():
     print("🌿 Starting the Health & Wellness Auto-Blogger...")
 
     api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        print("❌ Error: GEMINI_API_KEY not found")
+    blog_id = os.environ.get("BLOG_ID")
+    
+    if not api_key or not blog_id:
+        print("❌ Error: GEMINI_API_KEY or BLOG_ID not found")
         return
         
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-2.5-flash')
+    model = genai.GenerativeModel('gemini-1.5-flash')
 
-    # مصادر RSS قوية جداً في الصحة، العناية بالبشرة، العلاج الطبيعي، والراحة النفسية
+    # ====================================================
+    # 1. الاتصال بمدونتك أولاً لمعرفة المقالات المنشورة سابقاً
+    # ====================================================
+    print("🌐 Connecting to Blogger to check history...")
+    SCOPES = ['https://www.googleapis.com/auth/blogger']
+    
+    if not os.path.exists('token.json'):
+        print("❌ Error: token.json not found!")
+        return
+        
+    creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    service = build('blogger', 'v3', credentials=creds)
+    
+    recent_titles = []
+    try:
+        # قراءة عناوين آخر 30 مقال من مدونتك لمنع التكرار
+        request = service.posts().list(blogId=blog_id, maxResults=30, fields="items(title)")
+        response = request.execute()
+        recent_titles = [item.get('title', '') for item in response.get('items', [])]
+        print(f"🔍 Found {len(recent_titles)} recent articles in your blog. Checking for new news...")
+    except Exception as e:
+        print(f"⚠️ Could not fetch history: {e}")
+
+    # ====================================================
+    # 2. البحث عن خبر جديد (غير مكرر)
+    # ====================================================
     rss_urls = [
         "https://www.healthline.com/rss",
         "http://rssfeeds.webmd.com/rss/rss.aspx?RSSSource=RSS_PUBLIC",
@@ -38,28 +64,34 @@ def main():
         try:
             feed = feedparser.parse(url)
             if feed.entries:
-                latest_entry = random.choice(feed.entries[:5])
-                news_title = latest_entry.title
-                
-                if 'media_content' in latest_entry and len(latest_entry.media_content) > 0:
-                    news_image_url = latest_entry.media_content[0]['url']
-                elif 'links' in latest_entry:
-                    for link in latest_entry.links:
-                        if 'image' in link.get('type', ''):
-                            news_image_url = link.href
-                            break
-                break
+                # فحص أول 15 خبر من المصدر
+                for entry in feed.entries[:15]:
+                    # الشرط الذهبي: إذا كان عنوان الخبر ليس في مدونتك
+                    if entry.title not in recent_titles:
+                        news_title = entry.title
+                        
+                        # سحب الصورة
+                        if 'media_content' in entry and len(entry.media_content) > 0:
+                            news_image_url = entry.media_content[0]['url']
+                        elif 'links' in entry:
+                            for link in entry.links:
+                                if 'image' in link.get('type', ''):
+                                    news_image_url = link.href
+                                    break
+                        break # وجدنا خبراً حصرياً وغير مكرر، نوقف البحث هنا
+            if news_title:
+                break # نوقف البحث في باقي المواقع
         except:
             continue
             
     if not news_title:
-        print("❌ No news found today.")
+        print("✅ No NEW news found right now. All recent news are already on your blog. Will try again later.")
         return
         
-    print(f"📰 Found new health article: {news_title}")
+    print(f"📰 Found NEW exclusive health article: {news_title}")
 
     # ====================================================
-    # 🔴 ضع رابط Adsterra المباشر الخاص بك هنا 
+    # 🔴 رابط Adsterra المباشر الخاص بك 
     # ====================================================
     adsterra_direct_link = "https://www.profitablecpmratenetwork.com/ve3ktt21?key=949627e2df43786ddffa0da016c1bdcb"
 
@@ -82,29 +114,16 @@ def main():
     article_html = response.text
     article_html = article_html.replace('```html', '').replace('```', '').strip()
 
-    # خطة بديلة قوية ومضمونة 100% لجلب الصور
+    # خطة بديلة قوية ومضمونة 100% لجلب الصور (تمنع التكرار أيضا)
     if not news_image_url:
         fallback_keywords = ["wellness", "skincare", "yoga", "meditation", "spa", "healing", "mental", "healthy"]
         random_keyword = random.choice(fallback_keywords)
-        # استخدام خدمة LoremFlickr التي توفر صوراً متجددة وعالية الدقة مع إضافة وقت عشوائي لمنع تكرار نفس الصورة
         random_number = random.randint(1, 1000)
         news_image_url = f"https://loremflickr.com/800/400/{random_keyword}?lock={random_number}"
         print(f"🔄 Using fallback image for keyword: {random_keyword}")
 
     image_html = f'<div style="text-align: center; margin-bottom: 20px;"><img src="{news_image_url}" alt="{news_title}" style="max-width: 100%; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);"></div>'
     article_html = image_html + "\n" + article_html
-
-    print("🌐 Connecting to Blogger...")
-    SCOPES = ['https://www.googleapis.com/auth/blogger']
-    
-    if not os.path.exists('token.json'):
-        print("❌ Error: token.json not found!")
-        return
-        
-    creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    service = build('blogger', 'v3', credentials=creds)
-    
-    blog_id = os.environ.get("BLOG_ID")
     
     post_body = {
         'title': news_title,
